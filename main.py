@@ -1,117 +1,256 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ERP Danilo & Junior Elétrica</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-slate-900 text-slate-100 font-sans">
+# -*- coding: utf-8 -*-
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Date, ForeignKey, func
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from pydantic import BaseModel, Field
+from datetime import date, timedelta
+from typing import List, Optional
+import requests
+import hashlib
 
-    <div class="flex h-screen overflow-hidden">
-        <div class="w-64 bg-slate-950 p-5 flex flex-col justify-between hidden md:flex border-r border-slate-800">
-            <div>
-                <div class="flex items-center gap-3 mb-8">
-                    <div class="bg-amber-500 text-slate-950 p-2 rounded-lg font-bold text-xl">D&J</div>
-                    <div>
-                        <h1 class="font-bold text-sm leading-tight text-white">Danilo & Junior</h1>
-                        <p class="text-xs text-amber-500">Serviços Elétricos</p>
-                    </div>
-                </div>
-                <nav class="space-y-1">
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-500 text-slate-950 font-medium"><i class="fa-solid fa-chart-pie w-5"></i> Dashboard</a>
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition"><i class="fa-solid fa-users w-5"></i> Clientes</a>
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition"><i class="fa-solid fa-file-invoice-dollar w-5"></i> Orçamentos</a>
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition"><i class="fa-solid fa-screwdriver-wrench w-5"></i> Ordens de Serviço</a>
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition"><i class="fa-solid fa-boxes-stacked w-5"></i> Estoque</a>
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition"><i class="fa-solid fa-toolbox w-5"></i> Ferramentas</a>
-                    <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition"><i class="fa-solid fa-dollar-sign w-5"></i> Financeiro</a>
-                </nav>
-            </div>
-            <div class="border-t border-slate-800 pt-4 text-xs text-slate-500">
-                <p>Usuário: <strong>Júnior</strong></p>
-                <p>Status: <span class="text-emerald-500">Online</span></p>
-            </div>
-        </div>
+# =============================================================================
+# 1. CONFIGURAÇÃO DO BANCO DE DADOS (SQLite Local)
+# =============================================================================
+DATABASE_URL = "sqlite:///erp_danilo_junior.db"
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-        <div class="flex-1 flex flex-col overflow-y-auto">
-            <header class="bg-slate-950 px-6 py-4 flex items-center justify-between border-b border-slate-800">
-                <h2 class="text-xl font-bold text-white">Painel Geral</h2>
-                <div class="flex items-center gap-4">
-                    <button class="bg-slate-900 px-4 py-2 rounded-lg text-sm border border-slate-800 hover:border-slate-700"><i class="fa-solid fa-plus text-amber-500 mr-2"></i>Nova OS</button>
-                    <div class="w-10 h-10 rounded-full bg-amber-500 text-slate-950 font-bold flex items-center justify-center">JR</div>
-                </div>
-            </header>
+# =============================================================================
+# 2. MODELOS DO BANCO DE DADOS (ORM)
+# =============================================================================
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=False)
+    senha_sha256 = Column(String, nullable=False)
+    nivel_permissao = Column(String, default="ADMINISTRADOR")
 
-            <main class="p-6 space-y-6">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-semibold">Receita do Mês</p>
-                        <p class="text-2xl font-bold text-white mt-1">R$ 48.500,00</p>
-                        <span class="text-emerald-500 text-xs"><i class="fa-solid fa-arrow-trend-up"></i> +12% em relação a Junho</span>
-                    </div>
-                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-semibold">Despesas do Mês</p>
-                        <p class="text-2xl font-bold text-white mt-1">R$ 18.200,00</p>
-                        <span class="text-emerald-500 text-xs">Dentro do esperado</span>
-                    </div>
-                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-semibold">Lucro Real</p>
-                        <p class="text-2xl font-bold text-amber-500 mt-1">R$ 30.300,00</p>
-                        <span class="text-slate-400 text-xs">Margem de 62.4%</span>
-                    </div>
-                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-semibold">Serviços em Execução</p>
-                        <p class="text-2xl font-bold text-white mt-1">7 Ativos</p>
-                        <span class="text-amber-500 text-xs"><i class="fa-solid fa-clock"></i> 3 aguardando equipe</span>
-                    </div>
-                </div>
+class Cliente(Base):
+    __tablename__ = "clientes"
+    id = Column(Integer, primary_key=True, index=True)
+    nome_razao = Column(String, nullable=False)
+    cpf_cnpj = Column(String, unique=True, index=True, nullable=False)
+    telefone = Column(String)
+    cep = Column(String, nullable=False)
+    endereco = Column(String, nullable=False)
+    bairro = Column(String, nullable=False)
+    cidade = Column(String, nullable=False)
+    estado = Column(String, nullable=False)
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 bg-slate-950 p-5 rounded-xl border border-slate-800">
-                        <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-calendar-day text-amber-500 mr-2"></i> Agenda de Serviços de Hoje</h3>
-                        <div class="space-y-3">
-                            <div class="p-4 bg-slate-900 rounded-lg border-l-4 border-amber-500 flex justify-between items-center">
-                                <div>
-                                    <h4 class="font-bold text-sm text-white">Instalação de Subestação e Quadros</h4>
-                                    <p class="text-xs text-slate-400">Condomínio Solar das Palmeiras • 08:30</p>
-                                </div>
-                                <span class="bg-amber-500/10 text-amber-500 text-xs px-2.5 py-1 rounded-full font-medium">Em Andamento</span>
-                            </div>
-                            <div class="p-4 bg-slate-900 rounded-lg border-l-4 border-slate-600 flex justify-between items-center">
-                                <div>
-                                    <h4 class="font-bold text-sm text-white">Manutenção Preventiva de Disjuntores</h4>
-                                    <p class="text-xs text-slate-400">Supermercado Líder Doca • 14:00</p>
-                                </div>
-                                <span class="bg-slate-800 text-slate-400 text-xs px-2.5 py-1 rounded-full font-medium">Agendado</span>
-                            </div>
-                        </div>
-                    </div>
+class ItemEstoque(Base):
+    __tablename__ = "itens_estoque"
+    id = Column(Integer, primary_key=True, index=True)
+    codigo = Column(String, unique=True, index=True)
+    nome_material = Column(String, nullable=False)
+    quantidade_atual = Column(Float, default=0.0)
+    estoque_minimo = Column(Float, default=0.0)
+    preco_compra = Column(Float, nullable=False)
+    preco_venda = Column(Float, nullable=False)
 
-                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                        <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-circle-exclamation text-rose-500 mr-2"></i> Alertas do Estoque</h3>
-                        <div class="space-y-3">
-                            <div class="p-3 bg-rose-500/10 rounded-lg border border-rose-500/20 flex justify-between items-center">
-                                <div>
-                                    <h4 class="font-bold text-xs text-rose-400">Cabo Flexível 4mm²</h4>
-                                    <p class="text-[10px] text-slate-400">Estoque: 15 metros (Min: 50m)</p>
-                                </div>
-                                <span class="bg-rose-500 text-slate-950 text-[10px] px-2 py-0.5 rounded font-bold">COMPRAR</span>
-                            </div>
-                            <div class="p-3 bg-rose-500/10 rounded-lg border border-rose-500/20 flex justify-between items-center">
-                                <div>
-                                    <h4 class="font-bold text-xs text-rose-400">Disjuntor NEMA 50A</h4>
-                                    <p class="text-[10px] text-slate-400">Estoque: 2 unidades (Min: 5un)</p>
-                                </div>
-                                <span class="bg-rose-500 text-slate-950 text-[10px] px-2 py-0.5 rounded font-bold">COMPRAR</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
+class OrdemServico(Base):
+    __tablename__ = "ordens_servico"
+    id = Column(Integer, primary_key=True, index=True)
+    numero_os = Column(String, unique=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"))
+    status = Column(String, default="EM_ABERTO")  # EM_ABERTO, CONCLUIDO
+    descricao_servico = Column(String)
+    valor_total = Column(Float, default=0.0)
 
-</body>
-</html>
+class OsMaterialConsumido(Base):
+    __tablename__ = "os_materiais_consumidos"
+    id = Column(Integer, primary_key=True, index=True)
+    os_id = Column(Integer, ForeignKey("ordens_servico.id"))
+    item_estoque_id = Column(Integer, ForeignKey("itens_estoque.id"))
+    quantidade = Column(Float, nullable=False)
+
+class FinanceiroLancamento(Base):
+    __tablename__ = "financeiro_lancamentos"
+    id = Column(Integer, primary_key=True, index=True)
+    tipo = Column(String, nullable=False)  # RECEITA, DESPESA
+    valor = Column(Float, nullable=False)
+    data_vencimento = Column(Date, nullable=False)
+    pago = Column(Boolean, default=False)
+
+# Criar as tabelas no arquivo SQLite local
+Base.metadata.create_all(bind=engine)
+
+# =============================================================================
+# 3. SCHEMAS DE VALIDAÇÃO (Pydantic)
+# =============================================================================
+class ClienteCreate(BaseModel):
+    nome_razao: str
+    cpf_cnpj: str
+    telefone: str
+    cep: str
+    endereco: str
+    bairro: str
+    cidade: str
+    estado: str
+
+class LancamentoCreate(BaseModel):
+    tipo: str
+    valor: float
+    data_vencimento: date
+    pago: bool = False
+
+# Dependência para obter a sessão do Banco de Dados
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# =============================================================================
+# 4. INSTÂNCIA DO FASTAPI E ROTAS
+# =============================================================================
+app = FastAPI(
+    title="ERP Danilo & Junior - Serviços Elétricos",
+    description="API de testes do sistema de gestão e faturamento.",
+    version="1.0.0"
+)
+
+# Permitir acesso do Frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Evento de inicialização para inserir dados de teste (Mock Data)
+@app.on_event("startup")
+def popular_banco_de_dados():
+    db = SessionLocal()
+    if db.query(Usuario).count() == 0:
+        # Cadastra usuário padrão
+        senha_hash = hashlib.sha256("admin123".encode()).hexdigest()
+        admin = Usuario(nome="Júnior Administrador", username="junior", senha_sha256=senha_hash)
+        db.add(admin)
+        
+        # Cadastra materiais elétricos de teste
+        cabo = ItemEstoque(codigo="CAB50", nome_material="Cabo Flexível SIL 10mm²", quantidade_atual=150.0, estoque_minimo=50.0, preco_compra=8.50, preco_venda=14.90)
+        disjuntor = ItemEstoque(codigo="DISJ50", nome_material="Disjuntor DIN NEMA 50A", quantidade_atual=20.0, estoque_minimo=5.0, preco_compra=18.00, preco_venda=32.00)
+        db.add_all([cabo, disjuntor])
+        
+        # Cadastra um cliente inicial
+        cliente = Cliente(nome_razao="Condomínio Solar Belém", cpf_cnpj="12.345.678/0001-90", telefone="91999998888", cep="66000-000", endereco="Av. Nazaré", bairro="Nazaré", cidade="Belém", estado="PA")
+        db.add(cliente)
+        db.commit()
+    db.close()
+
+# --- ROTAS DE AUTENTICAÇÃO ---
+@app.post("/api/auth/login", tags=["Segurança"])
+def login(username: str, senha_plana: str, db: Session = Depends(get_db)):
+    senha_hash = hashlib.sha256(senha_plana.encode()).hexdigest()
+    user = db.query(Usuario).filter(Usuario.username == username, Usuario.senha_sha256 == senha_hash).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário ou senha incorretos.")
+    return {"status": "Sucesso", "token_tipo": "Bearer", "usuario": user.nome}
+
+# --- ROTAS DE CLIENTES ---
+@app.get("/api/clientes/cep/{cep}", tags=["Clientes"])
+def buscar_cep(cep: str):
+    """Consulta o endereço automaticamente através do ViaCEP"""
+    cep_limpo = cep.replace("-", "").replace(".", "")
+    resposta = requests.get(f"https://viacep.com.br/ws/{cep_limpo}/json/")
+    if resposta.status_code != 200 or "erro" in resposta.json():
+        raise HTTPException(status_code=404, detail="CEP inválido ou não encontrado.")
+    dados = resposta.json()
+    return {
+        "endereco": dados.get("logradouro"),
+        "bairro": dados.get("bairro"),
+        "cidade": dados.get("localidade"),
+        "estado": dados.get("uf")
+    }
+
+@app.post("/api/clientes", tags=["Clientes"])
+def cadastrar_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):
+    novo_cliente = Cliente(**cliente.model_dump())
+    db.add(novo_cliente)
+    db.commit()
+    db.refresh(novo_cliente)
+    return novo_cliente
+
+@app.get("/api/clientes", tags=["Clientes"])
+def listar_clientes(db: Session = Depends(get_db)):
+    return db.query(Cliente).all()
+
+# --- ROTAS DE ESTOQUE ---
+@app.get("/api/estoque", tags=["Almoxarifado"])
+def ver_estoque(db: Session = Depends(get_db)):
+    return db.query(ItemEstoque).all()
+
+# --- ROTAS DE ORDEM DE SERVIÇO (OS) ---
+@app.post("/api/os/criar-teste", tags=["Serviços de Campo"])
+def criar_os_teste(cliente_id: int, descricao: str, db: Session = Depends(get_db)):
+    """Cria uma OS e vincula materiais consumidos (fios e disjuntores)"""
+    nova_os = OrdemServico(
+        numero_os=f"OS-2026-001",
+        cliente_id=cliente_id,
+        status="EM_ABERTO",
+        descricao_servico=descricao,
+        valor_total=250.00
+    )
+    db.add(nova_os)
+    db.commit()
+    db.refresh(nova_os)
+    
+    # Vincula o consumo de 15 metros do Cabo Flexível (ID 1) para esta OS
+    consumo = OsMaterialConsumido(os_id=nova_os.id, item_estoque_id=1, quantidade=15.0)
+    db.add(consumo)
+    db.commit()
+    
+    return {"mensagem": "OS de teste aberta com sucesso!", "os": nova_os}
+
+@app.post("/api/os/{os_id}/finalizar", tags=["Serviços de Campo"])
+def finalizar_os(os_id: int, db: Session = Depends(get_db)):
+    """Finaliza a OS, atualiza o financeiro e dá baixa automática no estoque."""
+    os = db.query(OrdemServico).filter(OrdemServico.id == os_id).first()
+    if not os:
+        raise HTTPException(status_code=404, detail="OS não encontrada.")
+    if os.status == "CONCLUIDO":
+        return {"mensagem": "Esta OS já foi finalizada anteriormente."}
+    
+    # 1. Altera status da OS
+    os.status = "CONCLUIDO"
+    
+    # 2. Dá baixa física nos materiais utilizados na OS
+    materiais = db.query(OsMaterialConsumido).filter(OsMaterialConsumido.os_id == os.id).all()
+    for mat in materiais:
+        item = db.query(ItemEstoque).filter(ItemEstoque.id == mat.item_estoque_id).first()
+        if item:
+            item.quantidade_atual -= mat.quantidade # Subtrai fisicamente do estoque
+            
+    # 3. Lança automaticamente no Contas a Receber do Financeiro
+    recebivel = FinanceiroLancamento(
+        tipo="RECEITA",
+        valor=os.valor_total,
+        data_vencimento=date.today() + timedelta(days=5),
+        pago=False
+    )
+    db.add(recebivel)
+    db.commit()
+    
+    return {
+        "mensagem": "OS concluída com sucesso!",
+        "baixa_estoque": "Estoque deduzido!",
+        "financeiro": f"Lançamento de R$ {os.valor_total} gerado no contas a receber."
+    }
+
+# --- ROTAS DO FINANCEIRO ---
+@app.get("/api/financeiro/resumo", tags=["Financeiro & DRE"])
+def resumo_financeiro(db: Session = Depends(get_db)):
+    """Informa receitas do mês, despesas e faturamento futuro."""
+    receitas = db.query(func.sum(FinanceiroLancamento.valor)).filter(FinanceiroLancamento.tipo == "RECEITA").scalar() or 0.0
+    despesas = db.query(func.sum(FinanceiroLancamento.valor)).filter(FinanceiroLancamento.tipo == "DESPESA").scalar() or 0.0
+    return {
+        "faturamento_previsto_receber": receitas,
+        "despesas_vencendo": despesas,
+        "saldo_projetado": receitas - despesas
+    }
